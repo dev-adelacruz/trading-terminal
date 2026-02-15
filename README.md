@@ -60,7 +60,9 @@ trading-terminal/
 
 ### Prerequisites
 
-- Node.js (v18 or higher)
+- **Node.js v18 or higher** (required for Vite 7.x)
+  - Local development requires Node 18+
+  - Vercel automatically uses Node 18+ for deployments
 - npm or yarn
 
 ### Installation
@@ -93,6 +95,33 @@ yarn dev
 - `npm run build` - Build for production
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
+
+## 🚀 Deployment
+
+### Vercel (Recommended)
+
+This application is configured for easy deployment on [Vercel](https://vercel.com/). The project includes a `vercel.json` configuration file that handles the build process and SPA routing.
+
+#### Automatic GitHub Integration (Recommended)
+1. Push your code to a GitHub repository
+2. Log in to [Vercel](https://vercel.com/)
+3. Click "New Project" and import your GitHub repository
+4. Vercel will automatically detect the Vite configuration
+5. Configure deployment settings (optional):
+   - **Build Command**: `npm run build` (auto-detected)
+   - **Output Directory**: `dist` (auto-detected)
+   - **Framework Preset**: Vite (auto-detected)
+6. Click "Deploy"
+7. Your site will be live at `https://trading-terminal.vercel.app` (or your custom domain)
+
+#### Manual Deployment via Vercel CLI
+1. Install Vercel CLI: `npm i -g vercel`
+2. Run `vercel` in the project root
+3. Follow the prompts to link or create a new project
+4. Deploy: `vercel --prod`
+
+#### Environment Variables
+No environment variables are required for this application as it runs entirely client-side.
 
 ## 📖 Usage Guide
 
