@@ -339,43 +339,44 @@ const App = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              {/* Secondary Destructive Action */}
               <button 
                 onClick={() => setIsClearConfirmOpen(true)}
                 disabled={trades.length === 0}
-                className="bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-2 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all border border-rose-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                className="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400"
                 title="Clear All Positions"
               >
-                <Trash2 size={14} />
+                <Trash2 size={20} />
               </button>
 
-              {/* Merged Creation Dropdown */}
-              <div className="relative flex-1 sm:flex-none" ref={dropdownRef}>
-                <div className="flex items-center">
-                  <button 
-                    onClick={openAddModal}
-                    className="flex-1 sm:flex-none bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-l-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-md active:scale-95 border-r border-slate-700"
-                  >
-                    <Plus size={14} />
-                    New Position
-                  </button>
-                  <button 
-                    onClick={() => setIsCreateDropdownOpen(!isCreateDropdownOpen)}
-                    className="bg-slate-900 hover:bg-slate-800 text-white px-2 py-2 rounded-r-xl flex items-center justify-center text-xs transition-all shadow-md active:scale-95"
-                  >
-                    <ChevronDown size={14} className={`transition-transform duration-200 ${isCreateDropdownOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                </div>
+              {/* Refined Unified Split Button */}
+              <div className="relative flex items-stretch h-10 group" ref={dropdownRef}>
+                <button 
+                  onClick={openAddModal}
+                  className="bg-slate-900 hover:bg-slate-800 text-white pl-4 pr-3 rounded-l-xl flex items-center gap-2 text-xs font-bold transition-all active:scale-[0.98] border-r border-slate-800"
+                >
+                  <Plus size={14} />
+                  New Position
+                </button>
+                <button 
+                  onClick={() => setIsCreateDropdownOpen(!isCreateDropdownOpen)}
+                  className="bg-slate-900 hover:bg-slate-800 text-white px-2 rounded-r-xl flex items-center justify-center transition-all active:scale-[0.98]"
+                >
+                  <ChevronDown size={14} className={`transition-transform duration-200 ${isCreateDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
 
                 {isCreateDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 py-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 py-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
                     <button 
                       onClick={openMassModal}
-                      className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                      className="w-full px-4 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors"
                     >
                       <CopyPlus size={14} className="text-indigo-600" />
                       Mass Create
                     </button>
+                    <div className="h-px bg-slate-100 my-1 mx-2"></div>
+                    <div className="px-4 py-1 text-[10px] text-slate-400 font-medium">Additional tools coming soon...</div>
                   </div>
                 )}
               </div>
