@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -17,29 +17,32 @@ import {
   Info,
   Scale,
   Eye,
-  EyeOff
+  EyeOff,
+  CopyPlus,
+  AlertTriangle,
+  ChevronDown
 } from 'lucide-react';
 
 const App = () => {
   // Persistence Keys
   const STORAGE_KEYS = {
-    TRADES: 'eth_terminal_trades',
-    PRICE: 'eth_terminal_price',
-    PIP_VALUE: 'eth_terminal_pip_value'
+    TRADES: 'trading_terminal_trades',
+    PRICE: 'trading_terminal_price',
+    PIP_VALUE: 'trading_terminal_pip_value'
   };
 
   // State initialization with LocalStorage lookup
   const [trades, setTrades] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.TRADES);
     return saved ? JSON.parse(saved) : [
-      { id: 1, symbol: 'ETH/USD', side: 'buy', entryPrice: 2250.00, lotSize: 1.0, timestamp: new Date().toISOString(), excluded: false },
-      { id: 2, symbol: 'ETH/USD', side: 'sell', entryPrice: 2400.00, lotSize: 0.5, timestamp: new Date().toISOString(), excluded: false }
+      { id: 1, symbol: 'XAUUSD', side: 'buy', entryPrice: 2020.00, lotSize: 0.1, timestamp: new Date().toISOString(), excluded: false },
+      { id: 2, symbol: 'EURUSD', side: 'sell', entryPrice: 1.0850, lotSize: 1.0, timestamp: new Date().toISOString(), excluded: false }
     ];
   });
   
   const [currentPrice, setCurrentPrice] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.PRICE);
-    return saved ? JSON.parse(saved) : 2310.50;
+    return saved ? JSON.parse(saved) : 2030.00;
   });
 
   const [globalPipValue, setGlobalPipValue] = useState(() => {
@@ -48,10 +51,16 @@ const App = () => {
   });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isMassModalOpen, setIsMassModalOpen] = useState(false);
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+  const [isCreateDropdownOpen, setIsCreateDropdownOpen] = useState(false);
   
+  const dropdownRef = useRef(null);
+
   // Inline editing state
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({
+    symbol: 'XAUUSD',
     side: 'buy',
     entryPrice: '',
     lotSize: ''
@@ -59,10 +68,21 @@ const App = () => {
 
   // New trade state (for modal)
   const [newTrade, setNewTrade] = useState({
-    symbol: 'ETH/USD',
+    symbol: 'XAUUSD',
     side: 'buy',
     entryPrice: '',
     lotSize: '',
+  });
+
+  // Mass Create state
+  const [massCreate, setMassCreate] = useState({
+    symbol: 'XAUUSD',
+    side: 'buy',
+    basePrice: currentPrice,
+    stepSize: '10',
+    count: '5',
+    lotSize: '0.1',
+    direction: 'above' // or 'below'
   });
 
   // Persistence Effects
@@ -77,6 +97,24 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.PIP_VALUE, JSON.stringify(globalPipValue));
   }, [globalPipValue]);
+
+  // Click outside listener for dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsCreateDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Sync mass create base price when current price changes (if modal is closed)
+  useEffect(() => {
+    if (!isMassModalOpen) {
+      setMassCreate(prev => ({ ...prev, basePrice: currentPrice }));
+    }
+  }, [currentPrice, isMassModalOpen]);
 
   // Helper to calculate P/L for a single trade using the global pip value
   const calculateTradePnL = (trade, price) => {
@@ -107,12 +145,21 @@ const App = () => {
 
   // Modal Handlers
   const openAddModal = () => {
-    setNewTrade({ symbol: 'ETH/USD', side: 'buy', entryPrice: '', lotSize: '' });
+    setNewTrade({ symbol: 'XAUUSD', side: 'buy', entryPrice: currentPrice.toString(), lotSize: '' });
     setIsModalOpen(true);
+    setIsCreateDropdownOpen(false);
+  };
+
+  const openMassModal = () => {
+    setMassCreate(prev => ({ ...prev, basePrice: currentPrice }));
+    setIsMassModalOpen(true);
+    setIsCreateDropdownOpen(false);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
+    setIsMassModalOpen(false);
+    setIsClearConfirmOpen(false);
   };
 
   const handleAddSubmit = (e) => {
@@ -130,10 +177,43 @@ const App = () => {
     closeModal();
   };
 
+  const handleMassCreateSubmit = (e) => {
+    e.preventDefault();
+    const count = parseInt(massCreate.count);
+    const step = parseFloat(massCreate.stepSize);
+    const base = parseFloat(massCreate.basePrice);
+    const lotSize = parseFloat(massCreate.lotSize);
+    const sign = massCreate.direction === 'above' ? 1 : -1;
+
+    const newPositions = [];
+    const now = new Date().toISOString();
+
+    for (let i = 0; i < count; i++) {
+      newPositions.push({
+        id: Date.now() + i,
+        symbol: massCreate.symbol,
+        side: massCreate.side,
+        entryPrice: base + (sign * step * i),
+        lotSize: lotSize,
+        timestamp: now,
+        excluded: false
+      });
+    }
+
+    setTrades([...trades, ...newPositions]);
+    closeModal();
+  };
+
+  const clearAllTrades = () => {
+    setTrades([]);
+    closeModal();
+  };
+
   // Inline Editing Handlers
   const startInlineEdit = (trade) => {
     setEditingId(trade.id);
     setEditForm({
+      symbol: trade.symbol,
       side: trade.side,
       entryPrice: trade.entryPrice,
       lotSize: trade.lotSize
@@ -147,6 +227,7 @@ const App = () => {
   const saveInlineEdit = (id) => {
     setTrades(trades.map(t => t.id === id ? {
       ...t,
+      symbol: editForm.symbol,
       side: editForm.side,
       entryPrice: parseFloat(editForm.entryPrice),
       lotSize: parseFloat(editForm.lotSize)
@@ -171,19 +252,19 @@ const App = () => {
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
               <Layers className="text-indigo-600 shrink-0" />
-              ETH Terminal
+              Trading Terminal
             </h1>
-            <p className="text-slate-500 text-sm font-medium">Portfolio Management Dashboard</p>
+            <p className="text-slate-500 text-sm font-medium">Multi-Pair Portfolio Management</p>
           </div>
           
           <div className="flex items-center gap-4 bg-slate-100 p-2 rounded-xl border border-slate-200 w-full md:w-auto">
             <div className="px-3 py-1 flex-1 md:flex-none">
-              <span className="text-[10px] font-bold text-slate-500 uppercase block tracking-wider">Live ETH Price</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase block tracking-wider">Live Price</span>
               <div className="flex items-center gap-2">
                 <span className="text-indigo-700 font-bold">$</span>
                 <input 
                   type="number" 
-                  step="0.01"
+                  step="0.0001"
                   value={currentPrice}
                   onChange={(e) => setCurrentPrice(parseFloat(e.target.value) || 0)}
                   className="bg-transparent border-none focus:ring-0 text-lg font-mono font-bold w-full md:w-32 p-0 text-indigo-700"
@@ -194,7 +275,7 @@ const App = () => {
             <button 
               onClick={() => setCurrentPrice(prev => prev + 5.00)}
               className="p-2 hover:bg-white rounded-lg transition-colors text-slate-600 shrink-0"
-              title="Price Up $5"
+              title="Price Up"
             >
               <TrendingUp size={20} />
             </button>
@@ -221,7 +302,7 @@ const App = () => {
               <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Avg Position Price</span>
             </div>
             <div className="text-3xl font-bold font-mono text-indigo-600">
-              ${stats.averageEntryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ${stats.averageEntryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
             </div>
           </div>
 
@@ -258,13 +339,47 @@ const App = () => {
               </div>
             </div>
 
-            <button 
-              onClick={openAddModal}
-              className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-md active:scale-95"
-            >
-              <Plus size={14} />
-              New Position
-            </button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <button 
+                onClick={() => setIsClearConfirmOpen(true)}
+                disabled={trades.length === 0}
+                className="bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-2 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all border border-rose-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Clear All Positions"
+              >
+                <Trash2 size={14} />
+              </button>
+
+              {/* Merged Creation Dropdown */}
+              <div className="relative flex-1 sm:flex-none" ref={dropdownRef}>
+                <div className="flex items-center">
+                  <button 
+                    onClick={openAddModal}
+                    className="flex-1 sm:flex-none bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-l-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-md active:scale-95 border-r border-slate-700"
+                  >
+                    <Plus size={14} />
+                    New Position
+                  </button>
+                  <button 
+                    onClick={() => setIsCreateDropdownOpen(!isCreateDropdownOpen)}
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-2 py-2 rounded-r-xl flex items-center justify-center text-xs transition-all shadow-md active:scale-95"
+                  >
+                    <ChevronDown size={14} className={`transition-transform duration-200 ${isCreateDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
+
+                {isCreateDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 py-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <button 
+                      onClick={openMassModal}
+                      className="w-full px-4 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                    >
+                      <CopyPlus size={14} className="text-indigo-600" />
+                      Mass Create
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -296,23 +411,36 @@ const App = () => {
                       <tr key={trade.id} className={`transition-all duration-200 ${isEditing ? 'bg-indigo-50/50' : 'hover:bg-slate-50'} ${trade.excluded ? 'opacity-40 grayscale-[0.5]' : ''}`}>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <span className={`font-bold transition-colors ${trade.excluded ? 'text-slate-400' : 'text-slate-900'}`}>{trade.symbol}</span>
                             {isEditing ? (
-                              <select 
-                                className="text-[10px] font-bold px-2 py-1 rounded border border-indigo-200 bg-white"
-                                value={editForm.side}
-                                onChange={e => setEditForm({...editForm, side: e.target.value})}
-                              >
-                                <option value="buy">BUY</option>
-                                <option value="sell">SELL</option>
-                              </select>
+                              <div className="flex items-center gap-2">
+                                <select 
+                                  className="text-[10px] font-bold px-2 py-1 rounded border border-indigo-200 bg-white"
+                                  value={editForm.symbol}
+                                  onChange={e => setEditForm({...editForm, symbol: e.target.value})}
+                                >
+                                  <option value="XAUUSD">XAUUSD</option>
+                                  <option value="ETHUSD">ETHUSD</option>
+                                  <option value="EURUSD">EURUSD</option>
+                                </select>
+                                <select 
+                                  className="text-[10px] font-bold px-2 py-1 rounded border border-indigo-200 bg-white"
+                                  value={editForm.side}
+                                  onChange={e => setEditForm({...editForm, side: e.target.value})}
+                                >
+                                  <option value="buy">BUY</option>
+                                  <option value="sell">SELL</option>
+                                </select>
+                              </div>
                             ) : (
-                              <span className={`text-[10px] font-black px-2 py-0.5 rounded flex items-center gap-1 ${
-                                trade.side === 'buy' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
-                              }`}>
-                                {trade.side === 'buy' ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
-                                {trade.side.toUpperCase()}
-                              </span>
+                              <>
+                                <span className={`font-bold transition-colors ${trade.excluded ? 'text-slate-400' : 'text-slate-900'}`}>{trade.symbol}</span>
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded flex items-center gap-1 ${
+                                  trade.side === 'buy' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
+                                }`}>
+                                  {trade.side === 'buy' ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
+                                  {trade.side.toUpperCase()}
+                                </span>
+                              </>
                             )}
                           </div>
                         </td>
@@ -339,7 +467,7 @@ const App = () => {
                               onChange={e => setEditForm({...editForm, entryPrice: e.target.value})}
                             />
                           ) : (
-                            <span className="font-mono text-sm text-slate-500">${trade.entryPrice.toFixed(2)}</span>
+                            <span className="font-mono text-sm text-slate-500">${trade.entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span>
                           )}
                         </td>
 
@@ -404,14 +532,14 @@ const App = () => {
           </div>
         </div>
 
-        {/* Add Position Modal */}
+        {/* New Position Modal */}
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden transform animate-in zoom-in-95 duration-200">
               <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2 uppercase tracking-widest text-xs">
                   <Plus size={16} className="text-indigo-600" />
-                  New ETH Position
+                  New Position
                 </h3>
                 <button onClick={closeModal} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-colors">
                   <X size={20} />
@@ -440,20 +568,28 @@ const App = () => {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
+                <div className="space-y-4">
+                  <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-wider font-mono">Asset Pair</label>
-                    <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none" value={newTrade.symbol} onChange={e => setNewTrade({...newTrade, symbol: e.target.value})}>
-                      <option value="ETH/USD">ETH/USD</option>
+                    <select 
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none"
+                      value={newTrade.symbol}
+                      onChange={e => setNewTrade({...newTrade, symbol: e.target.value})}
+                    >
+                      <option value="XAUUSD">XAUUSD</option>
+                      <option value="ETHUSD">ETHUSD</option>
+                      <option value="EURUSD">EURUSD</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-wider font-mono">Entry Price</label>
-                    <input type="number" step="any" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="0.00" value={newTrade.entryPrice} onChange={e => setNewTrade({...newTrade, entryPrice: e.target.value})} />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-wider font-mono">Lot Size</label>
-                    <input type="number" step="any" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="1.0" value={newTrade.lotSize} onChange={e => setNewTrade({...newTrade, lotSize: e.target.value})} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-wider font-mono">Entry Price</label>
+                      <input type="number" step="any" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="0.00" value={newTrade.entryPrice} onChange={e => setNewTrade({...newTrade, entryPrice: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 tracking-wider font-mono">Lot Size</label>
+                      <input type="number" step="any" required className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all" placeholder="1.0" value={newTrade.lotSize} onChange={e => setNewTrade({...newTrade, lotSize: e.target.value})} />
+                    </div>
                   </div>
                 </div>
 
@@ -473,6 +609,143 @@ const App = () => {
                   Confirm {newTrade.side.toUpperCase()} Order
                 </button>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Mass Creation Modal */}
+        {isMassModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden transform animate-in zoom-in-95 duration-200">
+              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50/50">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2 uppercase tracking-widest text-xs">
+                  <CopyPlus size={16} className="text-indigo-600" />
+                  Mass Create Positions
+                </h3>
+                <button onClick={closeModal} className="p-2 hover:bg-slate-200 rounded-full text-slate-400 transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <form onSubmit={handleMassCreateSubmit} className="p-6 space-y-4">
+                <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">
+                  <button
+                    type="button"
+                    onClick={() => setMassCreate({...massCreate, side: 'buy'})}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                      massCreate.side === 'buy' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'
+                    }`}
+                  >
+                    BUY
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMassCreate({...massCreate, side: 'sell'})}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                      massCreate.side === 'sell' ? 'bg-white shadow-sm text-orange-600' : 'text-slate-500'
+                    }`}
+                  >
+                    SELL
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 tracking-wider font-mono">Asset Pair</label>
+                    <select 
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none"
+                      value={massCreate.symbol}
+                      onChange={e => setMassCreate({...massCreate, symbol: e.target.value})}
+                    >
+                      <option value="XAUUSD">XAUUSD</option>
+                      <option value="ETHUSD">ETHUSD</option>
+                      <option value="EURUSD">EURUSD</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 tracking-wider font-mono">Base Price</label>
+                    <input type="number" step="any" required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm outline-none" value={massCreate.basePrice} onChange={e => setMassCreate({...massCreate, basePrice: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 tracking-wider font-mono">Lot Size Each</label>
+                    <input type="number" step="any" required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm outline-none" value={massCreate.lotSize} onChange={e => setMassCreate({...massCreate, lotSize: e.target.value})} />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 tracking-wider font-mono">Step Size</label>
+                    <input type="number" step="any" required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm outline-none" value={massCreate.stepSize} onChange={e => setMassCreate({...massCreate, stepSize: e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 tracking-wider font-mono">Quantity</label>
+                    <input type="number" step="1" min="1" required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-sm outline-none" value={massCreate.count} onChange={e => setMassCreate({...massCreate, count: e.target.value})} />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2 tracking-wider font-mono text-center">Placement Direction</label>
+                    <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl">
+                      <button
+                        type="button"
+                        onClick={() => setMassCreate({...massCreate, direction: 'above'})}
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                          massCreate.direction === 'above' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500'
+                        }`}
+                      >
+                        Above Base
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMassCreate({...massCreate, direction: 'below'})}
+                        className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
+                          massCreate.direction === 'below' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500'
+                        }`}
+                      >
+                        Below Base
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button 
+                    type="submit"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg text-xs uppercase tracking-widest"
+                  >
+                    Generate {massCreate.count} Positions
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Clear All Confirmation Modal */}
+        {isClearConfirmOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white w-full max-sm:w-full max-w-sm rounded-3xl shadow-2xl border border-rose-100 overflow-hidden transform animate-in zoom-in-95 duration-200">
+              <div className="p-8 text-center space-y-4">
+                <div className="mx-auto w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center text-rose-600">
+                  <AlertTriangle size={32} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Clear All Positions?</h3>
+                  <p className="text-slate-500 text-sm mt-1">This will permanently remove all {trades.length} positions from your terminal and local storage.</p>
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    onClick={closeModal}
+                    className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={clearAllTrades}
+                    className="flex-1 px-4 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-2xl text-xs transition-all shadow-lg shadow-rose-100"
+                  >
+                    Yes, Clear All
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
